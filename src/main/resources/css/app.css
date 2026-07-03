@@ -1,0 +1,12 @@
+/* Minimal styling -- keeps the default Modena look but tightens spacing a bit. */
+.root {
+    -fx-font-size: 13px;
+}
+
+.table-view {
+    -fx-font-size: 12px;
+}
+
+.button {
+    -fx-cursor: hand;
+}
