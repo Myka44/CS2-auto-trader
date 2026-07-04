@@ -12,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -128,5 +130,20 @@ public final class HttpUtils {
 
     public static <T> T parse(String json, TypeReference<T> typeRef) throws IOException {
         return MAPPER.readValue(json, typeRef);
+    }
+
+    public static String formatURL(String url, Map<String, String> params) {
+        if (params == null || params.isEmpty()) {
+            return url;
+        }
+        StringBuilder sb = new StringBuilder(url);
+        if (!url.contains("?")) {
+            sb.append("?");
+        } else if (!url.endsWith("&")) {
+            sb.append("&");
+        }
+        params.forEach((k, v) -> sb.append(k).append("=").append(URLEncoder.encode(v, StandardCharsets.UTF_8)).append("&"));
+        sb.setLength(sb.length() - 1);
+        return sb.toString();
     }
 }

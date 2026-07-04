@@ -12,6 +12,7 @@ import org.example.util.FloatUtils;
 import org.example.util.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -35,9 +36,11 @@ public class DMarketClient implements TradingPlatform {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final ApiConfigRepository apiConfigRepository;
+    private final ApiConfig config;
 
-    public DMarketClient(ApiConfigRepository apiConfigRepository) {
+    public DMarketClient(ApiConfigRepository apiConfigRepository) throws IOException {
         this.apiConfigRepository = apiConfigRepository;
+        this.config = requireConfig();
     }
 
     @Override
@@ -59,26 +62,26 @@ public class DMarketClient implements TradingPlatform {
                 .orElseThrow(() -> new IOException("DMarket API keys are not configured. Add them in Settings."));
     }
 
-    private Map<String, String> signedGetHeaders(ApiConfig cfg, String apiUrlPath, String queryParams) {
+    private Map<String, String> signedGetHeaders(String apiUrlPath, String queryParams) {
         String nonce = String.valueOf(Instant.now().getEpochSecond());
         String stringToSign = "GET" + apiUrlPath + queryParams + nonce;
-        String signature = DMarketSigner.signMessage(stringToSign, cfg.getSecretKey());
+        String signature = DMarketSigner.signMessage(stringToSign, config.getSecretKey());
         Map<String, String> headers = new HashMap<>();
-        headers.put("X-Api-Key", cfg.getPublicKey());
+        headers.put("X-Api-Key", config.getPublicKey());
         headers.put("X-Request-Sign", "dmar ed25519 " + signature);
         headers.put("X-Sign-Date", nonce);
         return headers;
     }
 
-    private Map<String, String> signedPostHeaders(ApiConfig cfg, String apiUrlPath, Object body) throws IOException {
+    private Map<String, String> signedPostHeaders(String apiUrlPath, Object body) throws IOException {
         String nonce = String.valueOf(Instant.now().getEpochSecond());
         String stringToSign = "POST" + apiUrlPath + MAPPER.writeValueAsString(body) + nonce;
-        String signature = DMarketSigner.signMessage(stringToSign, cfg.getSecretKey());
+        String signature = DMarketSigner.signMessage(stringToSign, config.getSecretKey());
         Map<String, String> headers = new HashMap<>();
-        headers.put("X-Api-Key", cfg.getPublicKey());
+        headers.put("X-Api-Key", config.getPublicKey());
         headers.put("X-Request-Sign", "dmar ed25519 " + signature);
         headers.put("X-Sign-Date", nonce);
-        headers.put("Authorization", cfg.getJwtToken());
+        headers.put("Authorization", config.getJwtToken());
         return headers;
     }
 
@@ -169,12 +172,11 @@ public class DMarketClient implements TradingPlatform {
     // ---------------------------------------------------------------
 
     public List<UserTarget> getMyTargets(String marketHashName) throws IOException {
-        ApiConfig cfg = requireConfig();
         String encoded = java.net.URLEncoder.encode(marketHashName, StandardCharsets.UTF_8);
         String queryParams = "?BasicFilters.Status=TargetStatusActive&BasicFilters.Title=" + encoded;
         String apiUrlPath = "/marketplace-api/v1/user-targets";
 
-        Map<String, String> headers = signedGetHeaders(cfg, apiUrlPath, queryParams);
+        Map<String, String> headers = signedGetHeaders(apiUrlPath, queryParams);
         String response = HttpUtils.get(ROOT_API_URL + apiUrlPath + queryParams, headers);
         UserTargetsResponse parsed = HttpUtils.parse(response, new TypeReference<>() {});
         return parsed == null || parsed.items() == null ? List.of() : parsed.items();
@@ -199,7 +201,6 @@ public class DMarketClient implements TradingPlatform {
 
     @Override
     public String createTarget(Target target, String marketHashName) throws IOException {
-        ApiConfig cfg = requireConfig();
         String floatPartValue = resolveFloatPartValue(target);
         double priceUsd = target.getMaxPriceUsdCents() / 100.0;
 
@@ -219,7 +220,7 @@ public class DMarketClient implements TradingPlatform {
         );
 
         String apiUrlPath = "/marketplace-api/v1/user-targets/create";
-        Map<String, String> headers = signedPostHeaders(cfg, apiUrlPath, body);
+        Map<String, String> headers = signedPostHeaders(apiUrlPath, body);
         String response = HttpUtils.post(ROOT_API_URL + apiUrlPath, headers, body);
         log.info("DMarket createTarget response for {}: {}", marketHashName, response);
 
@@ -232,7 +233,6 @@ public class DMarketClient implements TradingPlatform {
 
     @Override
     public void updateTarget(Target target, String marketHashName, int newPriceCents) throws IOException {
-        ApiConfig cfg = requireConfig();
         String floatPartValue = resolveFloatPartValue(target);
         double priceUsd = newPriceCents / 100.0;
 
@@ -258,27 +258,25 @@ public class DMarketClient implements TradingPlatform {
         body.put("targets", List.of(singleTarget));
 
         String apiUrlPath = "/exchange/v1/target/update";
-        Map<String, String> headers = signedPostHeaders(cfg, apiUrlPath, body);
+        Map<String, String> headers = signedPostHeaders(apiUrlPath, body);
         String response = HttpUtils.post(ROOT_API_URL + apiUrlPath, headers, body);
         log.info("DMarket updateTarget response for {}: {}", marketHashName, response);
     }
 
     @Override
     public void deleteTarget(String platformTargetId) throws IOException {
-        ApiConfig cfg = requireConfig();
         Map<String, Object> body = Map.of("Targets", List.of(Map.of("TargetID", platformTargetId)));
         String apiUrlPath = "/marketplace-api/v1/user-targets/delete";
-        Map<String, String> headers = signedPostHeaders(cfg, apiUrlPath, body);
+        Map<String, String> headers = signedPostHeaders(apiUrlPath, body);
         HttpUtils.post(ROOT_API_URL + apiUrlPath, headers, body);
     }
 
     @Override
     public boolean targetExists(String platformTargetId) throws IOException {
         if (platformTargetId == null || platformTargetId.isBlank()) return false;
-        ApiConfig cfg = requireConfig();
         String apiUrlPath = "/marketplace-api/v1/user-targets";
         String queryParams = "?BasicFilters.Status=TargetStatusActive";
-        Map<String, String> headers = signedGetHeaders(cfg, apiUrlPath, queryParams);
+        Map<String, String> headers = signedGetHeaders(apiUrlPath, queryParams);
         String response = HttpUtils.get(ROOT_API_URL + apiUrlPath + queryParams, headers);
         UserTargetsResponse parsed = HttpUtils.parse(response, new TypeReference<>() {});
         if (parsed == null || parsed.items() == null) return false;

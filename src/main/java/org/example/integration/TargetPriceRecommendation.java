@@ -1,6 +1,9 @@
 package org.example.integration;
 
+import java.io.IOException;
+
 public interface TargetPriceRecommendation {
-    public int calculateRecommendedTargetPrice(String marketHashName, double floatFrom, double floatTo);
+    int calculateRecommendedTargetPrice(String marketHashName, Double floatMin, Double floatMax) throws IOException;
+    int calculateRecommendedTargetPrice(String marketHashName) throws IOException;
 
 }

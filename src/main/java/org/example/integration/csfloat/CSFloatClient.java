@@ -3,6 +3,7 @@ package org.example.integration.csfloat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.example.integration.TargetPriceRecommendation;
 import org.example.integration.TradingPlatform;
 import org.example.model.ApiConfig;
 import org.example.model.Platform;
@@ -33,19 +34,20 @@ import java.util.Map;
  * legacy session cookie fallback used only for buy-order endpoints if no
  * API key is set.
  */
-public class CSFloatClient implements TradingPlatform {
+public class CSFloatClient implements TradingPlatform, TargetPriceRecommendation {
 
     private static final Logger log = LoggerFactory.getLogger(CSFloatClient.class);
     private static final String ROOT_API_URL = "https://csfloat.com";
     private static final String LISTINGS_API_ENDPOINT = ROOT_API_URL + "/api/v1/listings";
     private static final String BUY_ORDERS_API_ENDPOINT = ROOT_API_URL + "/api/v1/buy-orders";
-
     private final ApiConfigRepository apiConfigRepository;
+    private final ApiConfig apiConfig;
     private final SkinRepository skinRepository;
 
-    public CSFloatClient(ApiConfigRepository apiConfigRepository, SkinRepository skinRepository) {
+    public CSFloatClient(ApiConfigRepository apiConfigRepository, SkinRepository skinRepository) throws IOException {
         this.apiConfigRepository = apiConfigRepository;
         this.skinRepository = skinRepository;
+        this.apiConfig = requireConfig();
     }
 
     @Override
@@ -66,48 +68,46 @@ public class CSFloatClient implements TradingPlatform {
                 .orElseThrow(() -> new IOException("CSFloat API key is not configured. Add it in Settings."));
     }
 
-    private Map<String, String> apiKeyHeader(ApiConfig cfg) throws IOException {
-        if (cfg.getPublicKey() == null || cfg.getPublicKey().isBlank()) {
+    private Map<String, String> getHeaders() throws IOException {
+        if (apiConfig.getPublicKey() == null || apiConfig.getPublicKey().isBlank()) {
             throw new IOException("CSFloat API key is not configured. Add it in Settings.");
         }
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Authorization", cfg.getPublicKey());
-        return headers;
-    }
-
-    private Map<String, String> cookieHeader(ApiConfig cfg) throws IOException {
-        if (cfg.getJwtToken() == null || cfg.getJwtToken().isBlank()) {
+        if (apiConfig.getJwtToken() == null || apiConfig.getJwtToken().isBlank()) {
             throw new IOException("CSFloat session cookie is not configured. Add it in Settings.");
         }
         Map<String, String> headers = new HashMap<>();
-        headers.put("Cookie", cfg.getJwtToken());
+        //headers.put("Authorization", apiConfig.getPublicKey());
+        headers.put("Cookie", apiConfig.getJwtToken());
         return headers;
     }
+
+
 
     // ---------------------------------------------------------------
     // Listings (documented, public sell offers)
     // ---------------------------------------------------------------
 
-    public List<CSFloatListing> getListings(String marketHashName, Double minFloat, Double maxFloat, String sortBy, int limit) throws IOException {
-        ApiConfig cfg = requireConfig();
+    public List<CSFloatListing> getListings(String marketHashName, Double floatMin, Double floatMax, String sortBy, int limit) throws IOException {
+
         StringBuilder url = new StringBuilder(LISTINGS_API_ENDPOINT + "?limit=" + limit);
         if (sortBy != null) url.append("&sort_by=").append(sortBy);
         if (marketHashName != null) {
             url.append("&market_hash_name=").append(java.net.URLEncoder.encode(marketHashName, StandardCharsets.UTF_8));
         }
-        if (minFloat != null) url.append("&min_float=").append(minFloat);
-        if (maxFloat != null) url.append("&max_float=").append(maxFloat);
+        if (floatMin != null) url.append("&min_float=").append(floatMin);
+        if (floatMax != null) url.append("&max_float=").append(floatMax);
 
-        Map<String, String> headers = apiKeyHeader(cfg);
+        Map<String, String> headers = getHeaders();
         String response = HttpUtils.get(url.toString(), headers);
-        return HttpUtils.parse(response, new TypeReference<>() {});
+        ListingsResponse parsed = HttpUtils.parse(response, new TypeReference<>() {});
+        return parsed == null || parsed.data() == null ? List.of() : parsed.data();
     }
 
     @Override
     public int getLowestOfferPriceCents(String marketHashName, Double floatMin, Double floatMax) throws IOException {
         List<CSFloatListing> listings = getListings(marketHashName, floatMin, floatMax, "lowest_price", 1);
         if (listings.isEmpty()) return -1;
-        Integer price = listings.get(0).price();
+        Integer price = listings.getFirst().price();
         return price == null ? -1 : price;
     }
 
@@ -116,8 +116,7 @@ public class CSFloatClient implements TradingPlatform {
     // ---------------------------------------------------------------
 
     public List<BuyOrder> getMyBuyOrders() throws IOException {
-        ApiConfig cfg = requireConfig();
-        Map<String, String> headers = cookieHeader(cfg);
+        Map<String, String> headers = getHeaders();
         String response = HttpUtils.get(ROOT_API_URL + "/api/v1/me/buy-orders", headers);
         JsonNode root = HttpUtils.mapper().readTree(response);
         // Some CSFloat responses return a bare array instead of {orders: [...]}.
@@ -172,8 +171,7 @@ public class CSFloatClient implements TradingPlatform {
 
     @Override
     public String createTarget(Target target, String marketHashName) throws IOException {
-        ApiConfig cfg = requireConfig();
-        Map<String, String> headers = cookieHeader(cfg);
+        Map<String, String> headers = getHeaders();
 
         SkinCatalogEntry skin = skinRepository.findByMarketHashName(marketHashName)
                 .orElseThrow(() -> new IOException("Skin not found in catalog: " + marketHashName));
@@ -184,8 +182,6 @@ public class CSFloatClient implements TradingPlatform {
         double floatMin = target.getFloatRangeMin() != null ? target.getFloatRangeMin() : skin.getFloatMin();
         double floatMax = target.getFloatRangeMax() != null ? target.getFloatRangeMax() : skin.getFloatMax();
 
-
-
         Map<String, Object> hybridProperties = Map.of(
                 "max_float", floatMax,
                 "min_float", floatMin
@@ -194,8 +190,6 @@ public class CSFloatClient implements TradingPlatform {
                 //Map.of("field", "FloatValue", "operator", "<", "value", Map.of("constant", String.valueOf(floatMax)))
         );
 
-
-
         Map<String, Object> body = Map.of(
                 "hybrid_properties", hybridProperties,
                 "market_hash_name", marketHashName,
@@ -203,7 +197,7 @@ public class CSFloatClient implements TradingPlatform {
                 "quantity", target.getQuantity()
         );
 
-        String response = HttpUtils.post(ROOT_API_URL + "/api/v1/buy-orders", headers, body);
+        String response = HttpUtils.post(BUY_ORDERS_API_ENDPOINT, headers, body);
         log.info("CSFloat createTarget response for {}: {}", marketHashName, response);
 
         CreateBuyOrderResponse parsed = HttpUtils.parse(response, new TypeReference<>() {});
@@ -221,16 +215,15 @@ public class CSFloatClient implements TradingPlatform {
                 log.warn("Failed to delete old CSFloat buy order {} before recreating: {}", target.getPlatformTargetId(), e.getMessage());
             }
         }
-        Target updated = target;
-        updated.setMaxPriceUsdCents(newPriceCents);
-        String newId = createTarget(updated, marketHashName);
+        target.setMaxPriceUsdCents(newPriceCents);
+        String newId = createTarget(target, marketHashName);
         target.setPlatformTargetId(newId);
     }
 
     @Override
     public void deleteTarget(String platformTargetId) throws IOException {
         ApiConfig cfg = requireConfig();
-        Map<String, String> headers = cookieHeader(cfg);
+        Map<String, String> headers = getHeaders();
         HttpUtils.delete(ROOT_API_URL + "/api/v1/buy-orders/" + platformTargetId, headers);
     }
 
@@ -245,13 +238,73 @@ public class CSFloatClient implements TradingPlatform {
         return false;
     }
 
+
+
+    @Override
+    public int calculateRecommendedTargetPrice(String marketHashName, Double floatMin, Double floatMax) throws IOException {
+        List<CSFloatListing> listings = getListings(marketHashName, floatMin, floatMax, "lowest_price", 50);
+        if (listings.isEmpty()) return -1;
+
+        double safetyMultiplier = 0.9;
+        long fairPriceSum = 0;
+        int fairPriceCount = 0;
+        double discountRatioSum = 0;
+        int discountRatioCount = 0;
+
+        for (CSFloatListing listing : listings) {
+            if (listing.reference() == null || listing.reference().predictedPrice() == null || listing.price() == null) continue;
+            int predicted = listing.reference().predictedPrice();
+            if (predicted <= 0) continue;
+
+            fairPriceSum += predicted;
+            fairPriceCount++;
+
+            if (listing.price() <= predicted) {
+                discountRatioSum += (double) listing.price() / predicted;
+                discountRatioCount++;
+            }
+        }
+
+        if (fairPriceCount == 0) return -1;
+        double avgFairPrice = (double) fairPriceSum / fairPriceCount;
+
+        double discountRatio = discountRatioCount > 0
+                ? discountRatioSum / discountRatioCount
+                : 1;
+
+        int recommended = (int) (avgFairPrice * discountRatio * safetyMultiplier);
+
+        Integer lowestAsk = listings.getFirst().price();
+        if (lowestAsk != null && recommended >= lowestAsk) {
+            recommended = lowestAsk - 1;
+        }
+        return recommended;
+    }
+
+
+    @Override
+    public int calculateRecommendedTargetPrice(String marketHashName) {
+        return 0;
+    }
+
     // ---------------------------------------------------------------
     // Typed response shapes, replacing raw List<Map<String, Object>>
     // response handling with Jackson-deserialized DTOs.
     // ---------------------------------------------------------------
 
+    private record ListingsResponse(List<CSFloatListing> data) {}
+
     /** Entry from GET /api/v1/listings; only the fields actually used downstream are modeled. */
-    public record CSFloatListing(Integer price) {}
+    public record CSFloatListing(
+            Integer price,
+            @JsonProperty("reference") ListingReference reference
+    ) {}
+
+    public record ListingReference(
+           @JsonProperty("float_factor") Double floatFactor,
+           @JsonProperty("base_price") Integer basePrice,
+           @JsonProperty("predicted_price") Integer predictedPrice
+    ) {}
 
     /** Entry from GET /api/v1/me/buy-orders (or POST /api/v1/buy-orders create response, minus id-only fields). */
     public record BuyOrder(

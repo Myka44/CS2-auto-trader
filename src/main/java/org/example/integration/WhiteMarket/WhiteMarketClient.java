@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.example.integration.TradingPlatform;
+import org.example.model.ApiConfig;
 import org.example.model.Platform;
 import org.example.model.SkinCatalogEntry;
 import org.example.model.Target;
@@ -27,6 +28,7 @@ public class WhiteMarketClient implements TradingPlatform {
 
     private static final String BASE_URL = "https://api.white.market/graphql/partner";
     private final ApiConfigRepository apiConfigRepository;
+    private final ApiConfig apiConfig;
     private final SkinRepository skinRepository;
     private static final String APP_ID = "CSGO";
     private static final String CSGO_FLOAT_PARAM = "CSGO_FLOAT";
@@ -187,9 +189,11 @@ public class WhiteMarketClient implements TradingPlatform {
             }
         """;
 
-    public WhiteMarketClient(ApiConfigRepository apiConfigRepository, SkinRepository skinRepository) {
+    public WhiteMarketClient(ApiConfigRepository apiConfigRepository, SkinRepository skinRepository) throws IOException {
         this.apiConfigRepository = apiConfigRepository;
         this.skinRepository = skinRepository;
+        this.apiConfig = this.apiConfigRepository.findByPlatform(Platform.WHITEMARKET)
+                .orElseThrow(() -> new IOException("WhiteMarketClient API is not configured. Add it in Settings."));
     }
 
     @Override
