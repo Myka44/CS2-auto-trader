@@ -18,6 +18,7 @@ public class Target {
     private int quantity = 10;
     private boolean autoAdjust = true;
     private boolean active = true;
+    private boolean autoCalculate = true;
     private Integer lastPriceCents;
     private String lastCheckedAt;
     private String lastError;
@@ -64,6 +65,10 @@ public class Target {
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public boolean isAutoCalculate() { return autoCalculate; }
+
+    public void setAutoCalculate(boolean autoCalculate) { this.autoCalculate = autoCalculate; }
 
     public Integer getLastPriceCents() { return lastPriceCents; }
     public void setLastPriceCents(Integer lastPriceCents) { this.lastPriceCents = lastPriceCents; }

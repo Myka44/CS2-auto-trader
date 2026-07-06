@@ -11,7 +11,7 @@ import java.util.List;
  * site). Keeps TargetService, AlertService, and PriceAggregator fully
  * platform-agnostic -- adding a new site only means writing one new class.
  */
-public interface TradingPlatform {
+public interface TradingPlatform extends IdentifiablePlatform{
 
     Platform platformId();
 

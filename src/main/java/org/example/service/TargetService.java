@@ -1,6 +1,7 @@
 package org.example.service;
 
 import org.example.integration.TradingPlatform;
+import org.example.model.Platform;
 import org.example.model.PriceSnapshot;
 import org.example.model.SkinCatalogEntry;
 import org.example.model.Target;
@@ -41,6 +42,7 @@ public class TargetService {
         this.skinRepository = skinRepository;
         this.priceSnapshotRepository = priceSnapshotRepository;
         this.priceAggregator = priceAggregator;
+
     }
 
     /** Runs one full pass over all active auto-adjust targets. Safe to call repeatedly from a scheduler. */
@@ -72,6 +74,15 @@ public class TargetService {
 
         Double floatMin = target.getFloatRangeMin(); //ar reikia same as marketHashName
         Double floatMax = target.getFloatRangeMax(); //ar reikia
+
+        if(target.isAutoCalculate()){
+            log.info("calculating price for {} {} {}", marketHashName, floatMin, floatMax);
+            int calculated = priceAggregator.recommendedPrice(target.getPlatform(), marketHashName, floatMin, floatMax);
+            log.info("Auto calculated price for {} is {}", marketHashName, calculated);
+            target.setMaxPriceUsdCents(calculated);
+        }
+
+        //target.setMaxPriceUsdCents(priceAggregator.clientFor(Platform.CSFLOAT).);
 
         // Get the price highest offer price of the an existing buy target
         int priceThreshold;
@@ -107,6 +118,7 @@ public class TargetService {
 
         if (target.getPlatformTargetId() != null && !target.getPlatformTargetId().isBlank()) {
             boolean stillExists = client.targetExists(target.getPlatformTargetId());
+            //TODO: panaikint target is seno client jei jis pakeiciamas
             if (!stillExists) {
                 log.info("Existing platform target {} no longer exists, recreating", target.getPlatformTargetId());
                 target.setPlatformTargetId(null);

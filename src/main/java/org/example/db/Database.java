@@ -78,6 +78,7 @@ public final class Database {
                     quantity             INTEGER NOT NULL DEFAULT 10,
                     auto_adjust          INTEGER NOT NULL DEFAULT 1,
                     active               INTEGER NOT NULL DEFAULT 1,
+                    auto_calculate       INTEGER NOT NULL DEFAULT 1,
                     last_price_cents     INTEGER,
                     last_checked_at      TEXT,
                     last_error           TEXT,

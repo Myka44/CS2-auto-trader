@@ -10,7 +10,7 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import org.example.model.Alert.Direction;
+
 import org.example.model.Platform;
 import org.example.model.SkinCatalogEntry;
 import org.example.repository.SkinRepository;
@@ -114,7 +114,7 @@ public class AlertsTab {
         });
         thresholdCol.setPrefWidth(90);
 
-        TableColumn<org.example.model.Alert, Direction> directionCol = new TableColumn<>("Direction");
+        TableColumn<org.example.model.Alert, org.example.model.Alert.Direction> directionCol = new TableColumn<>("Direction");
         directionCol.setCellValueFactory(new PropertyValueFactory<>("direction"));
         directionCol.setPrefWidth(100);
 
@@ -215,8 +215,8 @@ public class AlertsTab {
         TextField thresholdField = new TextField(existing != null ? String.format("%.2f", existing.getThresholdUsdCents() / 100.0) : "");
         thresholdField.setPromptText("e.g. 25.00");
 
-        ComboBox<Direction> directionBox = new ComboBox<>(FXCollections.observableArrayList(Direction.values()));
-        directionBox.setValue(existing != null ? existing.getDirection() : Direction.AT_OR_BELOW);
+        ComboBox<org.example.model.Alert.Direction> directionBox = new ComboBox<>(FXCollections.observableArrayList(org.example.model.Alert.Direction.values()));
+        directionBox.setValue(existing != null ? existing.getDirection() : org.example.model.Alert.Direction.AT_OR_BELOW);
 
         ComboBox<String> wearBox = new ComboBox<>(FXCollections.observableArrayList(
                 "Any", "Factory New", "Minimal Wear", "Field-Tested", "Well-Worn", "Battle-Scarred", "Custom range"));

@@ -10,6 +10,7 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.util.Pair;
 import org.example.model.Platform;
 import org.example.model.SkinCatalogEntry;
 import org.example.model.Target;
@@ -57,10 +58,15 @@ public class TargetsTab {
         editBtn.setOnAction(e -> {
             Target selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) openEditor(selected);
+            else new Alert(Alert.AlertType.INFORMATION, "Select a target to edit first").show(); //TODO pakeist ALERT TYPE
         });
         deleteBtn.setOnAction(e -> {
             Target selected = table.getSelectionModel().getSelectedItem();
-            if (selected == null) return;
+            if (selected == null) {
+                new Alert(Alert.AlertType.INFORMATION, "Select a target to delete first").show();
+                return;
+            }
+
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                     "Delete target for " + selected.getSkinMarketHashName() + " on " + selected.getPlatform().displayName() + "?\n"
                             + "Also remove the matching order from the platform?");
@@ -87,7 +93,7 @@ public class TargetsTab {
         refreshBtn.setOnAction(e -> refresh());
         runNowBtn.setOnAction(e -> {
             schedulerService.runTargetsNow();
-            new Alert(Alert.AlertType.INFORMATION, "Adjust cycle triggered in the background. Refresh in a few seconds to see updates.").showAndWait();
+            new Alert(Alert.AlertType.INFORMATION, "Adjust cycle triggered in the background. Refresh in a few seconds to see updates.").show();
         });
 
         root.setTop(toolbar);
@@ -148,9 +154,13 @@ public class TargetsTab {
         activeCol.setCellValueFactory(new PropertyValueFactory<>("active"));
         activeCol.setPrefWidth(60);
 
-        TableColumn<Target, Boolean> autoCol = new TableColumn<>("Auto-Adjust");
-        autoCol.setCellValueFactory(new PropertyValueFactory<>("autoAdjust"));
-        autoCol.setPrefWidth(90);
+        TableColumn<Target, Boolean> autoCalculateCol = new TableColumn<>("Auto-Calculate");
+        autoCalculateCol.setCellValueFactory(new PropertyValueFactory<>("autoCalculate"));
+        autoCalculateCol.setPrefWidth(110);
+
+        TableColumn<Target, Boolean> autoAdjustCol = new TableColumn<>("Auto-Adjust");
+        autoAdjustCol.setCellValueFactory(new PropertyValueFactory<>("autoAdjust"));
+        autoAdjustCol.setPrefWidth(110);
 
         TableColumn<Target, String> lastCheckedCol = new TableColumn<>("Last Checked");
         lastCheckedCol.setCellValueFactory(new PropertyValueFactory<>("lastCheckedAt"));
@@ -160,7 +170,7 @@ public class TargetsTab {
         errorCol.setCellValueFactory(new PropertyValueFactory<>("lastError"));
         errorCol.setPrefWidth(200);
 
-        table.getColumns().setAll(List.of(skinCol, platformCol, maxPriceCol, currentPriceCol, floatCol, qtyCol, activeCol, autoCol, lastCheckedCol, errorCol));
+        table.getColumns().setAll(List.of(skinCol, platformCol, maxPriceCol, currentPriceCol, floatCol, qtyCol, activeCol, autoCalculateCol, autoAdjustCol, lastCheckedCol, errorCol));
         table.setItems(data);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
     }
@@ -183,12 +193,12 @@ public class TargetsTab {
         TextField skinSearchField = new TextField();
         skinSearchField.setPromptText("Type to search skins (e.g. AK-47 Redline)...");
         ListView<SkinCatalogEntry> skinResults = new ListView<>();
-        skinResults.setPrefHeight(120);
+        skinResults.setPrefHeight(150);
         skinResults.setCellFactory(lv -> new ListCell<>() {
             @Override
             protected void updateItem(SkinCatalogEntry item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.getMarketHashName());
+                setText(empty || item == null ? null : item.getMarketHashName() + " (" + item.getRarity() + ")");
             }
         });
 
@@ -220,6 +230,13 @@ public class TargetsTab {
         // --- Max price ---
         TextField maxPriceField = new TextField(existing != null ? String.format("%.2f", existing.getMaxPriceUsdCents() / 100.0) : "");
         maxPriceField.setPromptText("0.00 = use current lowest offer as ceiling");
+
+        // --- Auto-calculate ---
+        CheckBox autoCalculateBox = new CheckBox("Auto-calculate max price");
+        autoCalculateBox.setSelected(existing != null && existing.isAutoCalculate());
+
+        autoCalculateBox.selectedProperty().addListener((obs, oldV, newV) -> maxPriceField.setDisable(newV));
+
 
         // --- Price modifier (outbid increment) ---
         TextField modifierField = new TextField(existing != null ? String.valueOf(existing.getPriceModifierCents()) : "1");
@@ -281,8 +298,13 @@ public class TargetsTab {
         grid.add(skinResults, 1, row++);
         grid.add(new Label("Platform:"), 0, row);
         grid.add(platformBox, 1, row++);
+        //Hbox priceBox = new Hbox(8, new Label("Max price (USD):"))
         grid.add(new Label("Max price (USD):"), 0, row);
-        grid.add(maxPriceField, 1, row++);
+        HBox priceBox = new HBox(8, maxPriceField, autoCalculateBox);
+        priceBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(priceBox, 1, row++);
+
+        //grid.add(maxPriceField, 1, row++);
         grid.add(new Label("Outbid increment (cents):"), 0, row);
         grid.add(modifierField, 1, row++);
         grid.add(new Label("Quantity:"), 0, row);
@@ -309,6 +331,7 @@ public class TargetsTab {
             t.setSkinMarketHashName(selectedSkinHolder[0].getMarketHashName());
             t.setPlatform(platformBox.getValue());
             t.setMaxPriceUsdCents(parseUsdToCents(maxPriceField.getText()));
+            t.setAutoCalculate(autoCalculateBox.isSelected());
             t.setPriceModifierCents(parseIntOrDefault(modifierField.getText(), 1));
             t.setQuantity(parseIntOrDefault(quantityField.getText(), 10));
             t.setAutoAdjust(autoAdjustBox.isSelected());

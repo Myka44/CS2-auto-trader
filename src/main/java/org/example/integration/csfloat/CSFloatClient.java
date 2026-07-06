@@ -3,7 +3,7 @@ package org.example.integration.csfloat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.example.integration.TargetPriceRecommendation;
+import org.example.integration.TargetPriceRecommender;
 import org.example.integration.TradingPlatform;
 import org.example.model.ApiConfig;
 import org.example.model.Platform;
@@ -34,7 +34,7 @@ import java.util.Map;
  * legacy session cookie fallback used only for buy-order endpoints if no
  * API key is set.
  */
-public class CSFloatClient implements TradingPlatform, TargetPriceRecommendation {
+public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
 
     private static final Logger log = LoggerFactory.getLogger(CSFloatClient.class);
     private static final String ROOT_API_URL = "https://csfloat.com";
@@ -242,7 +242,7 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommendation
 
     @Override
     public int calculateRecommendedTargetPrice(String marketHashName, Double floatMin, Double floatMax) throws IOException {
-        List<CSFloatListing> listings = getListings(marketHashName, floatMin, floatMax, "lowest_price", 50);
+        List<CSFloatListing> listings = getListings(marketHashName, floatMin, floatMax, "lowest_price", 10);
         if (listings.isEmpty()) return -1;
 
         double safetyMultiplier = 0.9;
@@ -278,6 +278,13 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommendation
         if (lowestAsk != null && recommended >= lowestAsk) {
             recommended = lowestAsk - 1;
         }
+        log.info("Recommended price for {}: {} (avg fair price: {}, discount ratio: {}, safety multiplier: {})",
+                marketHashName, recommended, avgFairPrice, discountRatio, safetyMultiplier);
+
+        if (recommended > 1000){
+            recommended = recommended + 10 - recommended % 10;
+        }
+
         return recommended;
     }
 

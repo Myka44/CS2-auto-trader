@@ -73,8 +73,8 @@ public class TargetRepository {
             INSERT INTO targets
                 (skin_id, platform, platform_target_id, max_price_usd_cents, price_modifier_cents,
                  float_range_min, float_range_max, float_part_value, quantity, auto_adjust, active,
-                 last_price_cents, last_checked_at, last_error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 auto_calculate, last_price_cents, last_checked_at, last_error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         LocalDateTime now = LocalDateTime.now();
         try (Connection conn = Database.getConnection();
@@ -99,7 +99,7 @@ public class TargetRepository {
             UPDATE targets SET
                 skin_id = ?, platform = ?, platform_target_id = ?, max_price_usd_cents = ?,
                 price_modifier_cents = ?, float_range_min = ?, float_range_max = ?, float_part_value = ?,
-                quantity = ?, auto_adjust = ?, active = ?, last_price_cents = ?, last_checked_at = ?,
+                quantity = ?, auto_adjust = ?, active = ?, auto_calculate = ?, last_price_cents = ?, last_checked_at = ?,
                 last_error = ?, updated_at = ?
             WHERE id = ?
         """;
@@ -117,11 +117,12 @@ public class TargetRepository {
             ps.setInt(9, t.getQuantity());
             ps.setInt(10, t.isAutoAdjust() ? 1 : 0);
             ps.setInt(11, t.isActive() ? 1 : 0);
-            setNullableInt(ps, 12, t.getLastPriceCents());
-            ps.setString(13, t.getLastCheckedAt());
-            ps.setString(14, t.getLastError());
-            ps.setString(15, now.toString());
-            ps.setLong(16, t.getId());
+            ps.setInt(12, t.isAutoCalculate() ? 1 : 0);
+            setNullableInt(ps, 13, t.getLastPriceCents());
+            ps.setString(14, t.getLastCheckedAt());
+            ps.setString(15, t.getLastError());
+            ps.setString(16, now.toString());
+            ps.setLong(17, t.getId());
             ps.executeUpdate();
             t.setUpdatedAt(now);
         } catch (SQLException e) {
@@ -151,11 +152,12 @@ public class TargetRepository {
         ps.setInt(9, t.getQuantity());
         ps.setInt(10, t.isAutoAdjust() ? 1 : 0);
         ps.setInt(11, t.isActive() ? 1 : 0);
-        setNullableInt(ps, 12, t.getLastPriceCents());
-        ps.setString(13, t.getLastCheckedAt());
-        ps.setString(14, t.getLastError());
-        ps.setString(15, created.toString());
-        ps.setString(16, updated.toString());
+        ps.setInt(12, t.isAutoCalculate() ? 1 : 0);
+        setNullableInt(ps, 13, t.getLastPriceCents());
+        ps.setString(14, t.getLastCheckedAt());
+        ps.setString(15, t.getLastError());
+        ps.setString(16, created.toString());
+        ps.setString(17, updated.toString());
     }
 
     private void setNullableDouble(PreparedStatement ps, int idx, Double value) throws SQLException {
@@ -183,6 +185,7 @@ public class TargetRepository {
         t.setQuantity(rs.getInt("quantity"));
         t.setAutoAdjust(rs.getInt("auto_adjust") != 0);
         t.setActive(rs.getInt("active") != 0);
+        t.setAutoCalculate(rs.getInt("auto_calculate") != 0);
         Integer lastPrice = getNullableInt(rs, "last_price_cents");
         t.setLastPriceCents(lastPrice);
         t.setLastCheckedAt(rs.getString("last_checked_at"));

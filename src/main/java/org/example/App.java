@@ -7,7 +7,6 @@ import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.stage.Stage;
 import org.example.db.Database;
-import org.example.integration.TradingPlatform;
 import org.example.integration.WhiteMarket.WhiteMarketClient;
 import org.example.integration.csfloat.CSFloatClient;
 import org.example.integration.dmarket.DMarketClient;
@@ -72,7 +71,9 @@ public class App extends Application {
         WhiteMarketClient whiteMarketClient = new WhiteMarketClient(apiConfigRepository, skinRepository);
 
         PriceAggregator priceAggregator = new PriceAggregator(
-                PriceAggregator.mapOf(dmarketClient, csFloatClient, whiteMarketClient)
+                PriceAggregator.mapOfTradingPlatform(dmarketClient, csFloatClient, whiteMarketClient),
+                PriceAggregator.mapOfTargetPriceRecommender(csFloatClient)
+
         );
 
         // --- Services ---
