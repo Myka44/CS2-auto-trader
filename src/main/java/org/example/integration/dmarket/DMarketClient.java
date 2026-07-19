@@ -56,10 +56,13 @@ public class DMarketClient implements TradingPlatform {
                 .orElse(false);
     }
 
+
+
+
     private ApiConfig requireConfig() throws IOException {
         return apiConfigRepository.findByPlatform(Platform.DMARKET)
                 .filter(c -> c.getPublicKey() != null && c.getSecretKey() != null)
-                .orElseThrow(() -> new IOException("DMarket API keys are not configured. Add them in Settings."));
+                .orElse(null);
     }
 
     private Map<String, String> signedGetHeaders(String apiUrlPath, String queryParams) {

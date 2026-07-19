@@ -193,7 +193,7 @@ public class WhiteMarketClient implements TradingPlatform {
         this.apiConfigRepository = apiConfigRepository;
         this.skinRepository = skinRepository;
         this.apiConfig = this.apiConfigRepository.findByPlatform(Platform.WHITEMARKET)
-                .orElseThrow(() -> new IOException("WhiteMarketClient API is not configured. Add it in Settings."));
+                .orElse(null);
     }
 
     @Override

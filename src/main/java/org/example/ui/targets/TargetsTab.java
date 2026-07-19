@@ -1,5 +1,7 @@
 package org.example.ui.targets;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -11,6 +13,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.util.Pair;
+import org.controlsfx.validation.ValidationSupport;
 import org.example.model.Platform;
 import org.example.model.SkinCatalogEntry;
 import org.example.model.Target;
@@ -18,6 +21,8 @@ import org.example.repository.SkinRepository;
 import org.example.service.SchedulerService;
 import org.example.service.TargetService;
 import org.example.util.WearCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +33,7 @@ public class TargetsTab {
     private final TargetService targetService;
     private final SkinRepository skinRepository;
     private final SchedulerService schedulerService;
+    private static final Logger log = LoggerFactory.getLogger(TargetsTab.class);
 
     private final TableView<Target> table = new TableView<>();
     private final ObservableList<Target> data = FXCollections.observableArrayList();
@@ -46,15 +52,17 @@ public class TargetsTab {
 
         HBox toolbar = new HBox(8);
         Button addBtn = new Button("New Target");
+        Button bulkAddBtn = new Button("Bulk Add");
         Button editBtn = new Button("Edit");
         Button deleteBtn = new Button("Delete");
         Button toggleBtn = new Button("Enable/Disable");
         Button refreshBtn = new Button("Refresh");
         Button runNowBtn = new Button("Run Adjust Cycle Now");
-        toolbar.getChildren().addAll(addBtn, editBtn, deleteBtn, toggleBtn, refreshBtn, runNowBtn);
+        toolbar.getChildren().addAll(addBtn, bulkAddBtn, editBtn, deleteBtn, toggleBtn, refreshBtn, runNowBtn);
         toolbar.setPadding(new Insets(0, 0, 10, 0));
 
         addBtn.setOnAction(e -> openEditor(null));
+        bulkAddBtn.setOnAction(e -> openBulkEditor());
         editBtn.setOnAction(e -> {
             Target selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) openEditor(selected);
@@ -223,19 +231,63 @@ public class TargetsTab {
             }
         });
 
+
+
         // --- Platform ---
         ComboBox<Platform> platformBox = new ComboBox<>(FXCollections.observableArrayList(Platform.values()));
         platformBox.setValue(existing != null ? existing.getPlatform() : Platform.DMARKET);
 
+
         // --- Max price ---
         TextField maxPriceField = new TextField(existing != null ? String.format("%.2f", existing.getMaxPriceUsdCents() / 100.0) : "");
         maxPriceField.setPromptText("0.00 = use current lowest offer as ceiling");
+        Label maxPriceErrorLabel = new Label();
+        Label minPriceErrorLabel = new Label();
+        initErrorLabel(maxPriceErrorLabel, "-fx-text-fill: red;");
+
+        // --- Min price ---
+        TextField minPriceField = new TextField(existing != null && existing.getMinPriceUsdCents() > 0
+                ? String.format("%.2f", existing.getMinPriceUsdCents() / 100.0) : "");
+        minPriceField.setPromptText("Minimum price in USD");
+
+        // Max price validation
+        maxPriceField.textProperty().addListener((obs, oldV, newV) -> {
+            validateMaxPrice(maxPriceField, minPriceField, maxPriceErrorLabel);
+            validateMinPrice(minPriceField, maxPriceField, minPriceErrorLabel);
+        });
+
+        minPriceField.textProperty().addListener((obs, oldV, newV) -> {
+            validateMaxPrice(maxPriceField, minPriceField, maxPriceErrorLabel);
+            validateMinPrice(minPriceField, maxPriceField, minPriceErrorLabel);
+        });
+
 
         // --- Auto-calculate ---
-        CheckBox autoCalculateBox = new CheckBox("Auto-calculate max price");
+        CheckBox autoCalculateBox = new CheckBox("Auto-calculate max and min price");
         autoCalculateBox.setSelected(existing != null && existing.isAutoCalculate());
+        //obs, oldV, newV) -> maxPriceField.setDisable(newV))
+        autoCalculateBox.selectedProperty().addListener((observableValue, oldV, newV) -> {
+            maxPriceField.setDisable(newV);
+            minPriceField.setDisable(newV);
 
-        autoCalculateBox.selectedProperty().addListener((obs, oldV, newV) -> maxPriceField.setDisable(newV));
+        });
+
+        // --- Auto-calculate multipliers ---
+        TextField autoCalcMinMultiplierField = new TextField(existing != null && existing.getAutoCalculateMinMultiplier() != null
+                ? String.valueOf(existing.getAutoCalculateMinMultiplier()) : "1.0");
+        TextField autoCalcMaxMultiplierField = new TextField(existing != null && existing.getAutoCalculateMaxMultiplier() != null
+                ? String.valueOf(existing.getAutoCalculateMaxMultiplier()) : "1.0");
+        autoCalcMinMultiplierField.setPromptText("Min multiplier");
+        autoCalcMaxMultiplierField.setPromptText("Max multiplier");
+
+        //Disable init TODO kodel sitas neveikia
+        autoCalcMinMultiplierField.setDisable(!autoCalculateBox.isSelected());
+        autoCalcMaxMultiplierField.setDisable(!autoCalculateBox.isSelected());
+
+        autoCalculateBox.selectedProperty().addListener((obs, oldV, newV) -> {
+            autoCalcMinMultiplierField.setDisable(!newV);
+            autoCalcMaxMultiplierField.setDisable(!newV);
+        });
 
 
         // --- Price modifier (outbid increment) ---
@@ -299,10 +351,22 @@ public class TargetsTab {
         grid.add(new Label("Platform:"), 0, row);
         grid.add(platformBox, 1, row++);
         //Hbox priceBox = new Hbox(8, new Label("Max price (USD):"))
-        grid.add(new Label("Max price (USD):"), 0, row);
+         grid.add(new Label("Max price (USD):"), 0, row);
         HBox priceBox = new HBox(8, maxPriceField, autoCalculateBox);
         priceBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(priceBox, 1, row++);
+        grid.add(maxPriceErrorLabel, 1, row++);
+
+        // Min price
+        grid.add(new Label("Min price (USD):"), 0, row);
+        grid.add(minPriceField, 1, row++);
+        grid.add(minPriceErrorLabel, 1, row++);
+
+        // Auto-calculate multipliers (only active when auto-calculate is checked)
+        HBox multipliersBox = new HBox(8, new Label("Min Multiplier:"), autoCalcMinMultiplierField, 
+                                       new Label("Max Multiplier:"), autoCalcMaxMultiplierField);
+        multipliersBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(multipliersBox, 1, row++);
 
         //grid.add(maxPriceField, 1, row++);
         grid.add(new Label("Outbid increment (cents):"), 0, row);
@@ -320,7 +384,7 @@ public class TargetsTab {
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-        dialog.setResultConverter(buttonType -> {
+         dialog.setResultConverter(buttonType -> {
             if (buttonType != ButtonType.OK) return null;
             if (selectedSkinHolder[0] == null) {
                 new Alert(Alert.AlertType.ERROR, "Please select a skin from the search results.").showAndWait();
@@ -336,6 +400,21 @@ public class TargetsTab {
             t.setQuantity(parseIntOrDefault(quantityField.getText(), 10));
             t.setAutoAdjust(autoAdjustBox.isSelected());
             t.setActive(activeBox.isSelected());
+
+            // Set min price
+            t.setMinPriceUsdCents(parseUsdToCents(minPriceField.getText()));
+
+            // Set auto-calculate multipliers
+            try {
+                t.setAutoCalculateMinMultiplier(Double.parseDouble(autoCalcMinMultiplierField.getText()));
+            } catch (NumberFormatException e) {
+                t.setAutoCalculateMinMultiplier(1.0);
+            }
+            try {
+                t.setAutoCalculateMaxMultiplier(Double.parseDouble(autoCalcMaxMultiplierField.getText()));
+            } catch (NumberFormatException e) {
+                t.setAutoCalculateMaxMultiplier(1.0);
+            }
 
             if (!floatMinField.getText().isBlank() && !floatMaxField.getText().isBlank()) {
                 try {
@@ -361,6 +440,285 @@ public class TargetsTab {
             }
             refresh();
         });
+    }
+
+    /**
+     * Bulk-create dialog: pick many skins from a multi-select search list, apply one
+     * shared set of target settings (platform, price, wear/float, flags) to all of them.
+     */
+    private void openBulkEditor() {
+        Dialog<List<Target>> dialog = new Dialog<>();
+        dialog.setTitle("Bulk Add Targets");
+        dialog.setResizable(true);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(15));
+
+        // --- Skin search (multi-select) ---
+        TextField skinSearchField = new TextField();
+        skinSearchField.setPromptText("Type to search skins (e.g. AK-47 Redline)...");
+        ListView<SkinCatalogEntry> skinResults = new ListView<>();
+        skinResults.setPrefHeight(180);
+        skinResults.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        skinResults.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(SkinCatalogEntry item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getMarketHashName() + " (" + item.getRarity() + ")");
+            }
+        });
+
+        ObservableList<SkinCatalogEntry> pickedSkins = FXCollections.observableArrayList();
+        ListView<SkinCatalogEntry> pickedView = new ListView<>(pickedSkins);
+        pickedView.setPrefHeight(120);
+        pickedView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(SkinCatalogEntry item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getMarketHashName());
+            }
+        });
+        Label pickedLabel = new Label("Selected skins (0):");
+
+        Button addSelectedBtn = new Button("Add Selected \u2193");
+        Button removePickedBtn = new Button("Remove Selected \u2191");
+        Button clearPickedBtn = new Button("Clear All");
+        HBox pickButtons = new HBox(8, addSelectedBtn, removePickedBtn, clearPickedBtn);
+
+        addSelectedBtn.setOnAction(e -> {
+            for (SkinCatalogEntry s : skinResults.getSelectionModel().getSelectedItems()) {
+                if (!pickedSkins.contains(s)) pickedSkins.add(s);
+            }
+            pickedLabel.setText("Selected skins (" + pickedSkins.size() + "):");
+        });
+        removePickedBtn.setOnAction(e -> {
+            pickedSkins.removeAll(pickedView.getSelectionModel().getSelectedItems());
+            pickedLabel.setText("Selected skins (" + pickedSkins.size() + "):");
+        });
+        clearPickedBtn.setOnAction(e -> {
+            pickedSkins.clear();
+            pickedLabel.setText("Selected skins (0):");
+        });
+
+        skinSearchField.textProperty().addListener((obs, oldV, newV) -> {
+            if (newV == null || newV.isBlank()) {
+                skinResults.getItems().clear();
+                return;
+            }
+            skinResults.getItems().setAll(skinRepository.search(newV, 30));
+        });
+
+        // --- Shared settings (same as single-target editor) ---
+        ComboBox<Platform> platformBox = new ComboBox<>(FXCollections.observableArrayList(Platform.values()));
+        platformBox.setValue(Platform.DMARKET);
+
+        TextField maxPriceField = new TextField();
+        maxPriceField.setPromptText("0.00 = use current lowest offer as ceiling");
+
+        CheckBox autoCalculateBox = new CheckBox("Auto-calculate max price");
+        autoCalculateBox.setSelected(true);
+        autoCalculateBox.selectedProperty().addListener((obs, oldV, newV) -> maxPriceField.setDisable(newV));
+        maxPriceField.setDisable(true);
+
+        TextField modifierField = new TextField("1");
+        TextField quantityField = new TextField("10");
+
+        ComboBox<String> wearBox = new ComboBox<>(FXCollections.observableArrayList(
+                "Any", "Factory New", "Minimal Wear", "Field-Tested", "Well-Worn", "Battle-Scarred", "Custom range"));
+        wearBox.setValue("Any");
+
+        TextField floatMinField = new TextField();
+        TextField floatMaxField = new TextField();
+        floatMinField.setPromptText("0.00");
+        floatMaxField.setPromptText("1.00");
+        floatMinField.setDisable(true);
+        floatMaxField.setDisable(true);
+
+        wearBox.valueProperty().addListener((obs, oldV, newV) -> {
+            boolean custom = "Custom range".equals(newV);
+            floatMinField.setDisable(!custom);
+            floatMaxField.setDisable(!custom);
+            if (!custom && !"Any".equals(newV)) {
+                WearCondition wc = WearCondition.fromLabel(newV);
+                if (wc != null) {
+                    floatMinField.setText(String.valueOf(wc.getFloatMin()));
+                    floatMaxField.setText(String.valueOf(wc.getFloatMax()));
+                }
+            } else if ("Any".equals(newV)) {
+                floatMinField.clear();
+                floatMaxField.clear();
+            }
+        });
+
+        CheckBox autoAdjustBox = new CheckBox("Auto-adjust price to outbid competing targets");
+        autoAdjustBox.setSelected(true);
+        CheckBox activeBox = new CheckBox("Active");
+        activeBox.setSelected(true);
+
+        int row = 0;
+        grid.add(new Label("Search skins:"), 0, row);
+        grid.add(skinSearchField, 1, row++);
+        grid.add(skinResults, 1, row++);
+        grid.add(pickButtons, 1, row++);
+        grid.add(pickedLabel, 0, row);
+        grid.add(pickedView, 1, row++);
+        grid.add(new Separator(), 0, row, 2, 1);
+        row++;
+        grid.add(new Label("These settings apply to every selected skin:"), 0, row, 2, 1);
+        row++;
+        grid.add(new Label("Platform:"), 0, row);
+        grid.add(platformBox, 1, row++);
+        grid.add(new Label("Max price (USD):"), 0, row);
+        HBox priceBox = new HBox(8, maxPriceField, autoCalculateBox);
+        priceBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(priceBox, 1, row++);
+        grid.add(new Label("Outbid increment (cents):"), 0, row);
+        grid.add(modifierField, 1, row++);
+        grid.add(new Label("Quantity:"), 0, row);
+        grid.add(quantityField, 1, row++);
+        grid.add(new Label("Wear / float range:"), 0, row);
+        grid.add(wearBox, 1, row++);
+        HBox floatBox = new HBox(8, new Label("Min:"), floatMinField, new Label("Max:"), floatMaxField);
+        floatBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(floatBox, 1, row++);
+        grid.add(autoAdjustBox, 1, row++);
+        grid.add(activeBox, 1, row++);
+
+        dialog.getDialogPane().setContent(grid);
+        ButtonType createButtonType = new ButtonType("Create Targets", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(createButtonType, ButtonType.CANCEL);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType != createButtonType) return null;
+            if (pickedSkins.isEmpty()) {
+                new Alert(Alert.AlertType.ERROR, "Select at least one skin first.").showAndWait();
+                return null;
+            }
+
+            Double floatMin = null, floatMax = null;
+            if (!floatMinField.getText().isBlank() && !floatMaxField.getText().isBlank()) {
+                try {
+                    floatMin = Double.parseDouble(floatMinField.getText());
+                    floatMax = Double.parseDouble(floatMaxField.getText());
+                } catch (NumberFormatException ignored) {
+                    // leave null -> "any" float range
+                }
+            }
+
+            List<Target> targets = new java.util.ArrayList<>();
+            for (SkinCatalogEntry skin : pickedSkins) {
+                Target t = new Target();
+                t.setSkinId(skin.getId());
+                t.setSkinMarketHashName(skin.getMarketHashName());
+                t.setPlatform(platformBox.getValue());
+                t.setMaxPriceUsdCents(parseUsdToCents(maxPriceField.getText()));
+                t.setAutoCalculate(autoCalculateBox.isSelected());
+                t.setPriceModifierCents(parseIntOrDefault(modifierField.getText(), 1));
+                t.setQuantity(parseIntOrDefault(quantityField.getText(), 10));
+                t.setAutoAdjust(autoAdjustBox.isSelected());
+                t.setActive(activeBox.isSelected());
+                t.setFloatRangeMin(floatMin);
+                t.setFloatRangeMax(floatMax);
+                targets.add(t);
+            }
+            return targets;
+        });
+
+        Optional<List<Target>> result = dialog.showAndWait();
+        result.ifPresent(targets -> {
+            int failed = 0;
+            for (Target t : targets) {
+                try {
+                    targetService.createTarget(t);
+                } catch (Exception ex) {
+                    failed++;
+                }
+            }
+            refresh();
+            String msg = "Created " + (targets.size() - failed) + " of " + targets.size() + " targets.";
+            if (failed > 0) msg += " " + failed + " failed -- check logs.";
+            new Alert(Alert.AlertType.INFORMATION, msg).showAndWait();
+        });
+    }
+
+    private void showErrorLabel(Label error, String text) {
+        error.setText(text);
+        error.setVisible(true);
+        error.setManaged(true);
+    }
+
+    private void hideErrorLabel(Label error) {
+        error.setVisible(false);
+        error.setManaged(false);
+    }
+
+    private void initErrorLabel(Label error, String style) {
+        if (style != null) error.setStyle(style);
+        hideErrorLabel(error);
+    }
+
+    @SuppressWarnings("SameParameterValue")
+
+    private void validateMaxPrice(TextField maxPriceField, TextField minPriceField, Label maxPriceError){
+        float maxPrice;
+        float minPrice;
+
+        try {
+            maxPrice = maxPriceField.getText().isBlank() ? Float.MAX_VALUE : Float.parseFloat(maxPriceField.getText());
+        } catch (NumberFormatException e) {
+            showErrorLabel(maxPriceError, "Max price must be a number.");
+            return;
+        }
+
+        try {
+            minPrice = minPriceField.getText().isBlank() ? 0f : Float.parseFloat(minPriceField.getText());
+        } catch (NumberFormatException e) {
+            minPrice = 0f;
+        }
+
+        if (maxPrice <= 0) {
+            showErrorLabel(maxPriceError, "Max price must be greater than 0.");
+            return;
+        }
+        if (maxPrice < minPrice) {
+            showErrorLabel(maxPriceError, "Max price must be greater than min price.");
+            return;
+        }
+
+        hideErrorLabel(maxPriceError);
+    }
+
+    private void validateMinPrice(TextField minPriceField, TextField maxPriceField, Label minPriceError) {
+        float minPrice;
+        float maxPrice;
+
+        try {
+            minPrice = minPriceField.getText().isBlank() ? 0f :Float.parseFloat(minPriceField.getText());
+        }
+        catch (NumberFormatException e) {
+            showErrorLabel(minPriceError, "Min price must be a number.");
+            return;
+        }
+
+        try {
+            maxPrice = maxPriceField.getText().isBlank() ? Float.MAX_VALUE : Float.parseFloat(maxPriceField.getText());
+        }
+        catch (NumberFormatException e) {
+            maxPrice = Float.MAX_VALUE;
+        }
+
+        if (minPrice < 0) {
+            showErrorLabel(minPriceError, "Min price must be greater than or equal to 0.");
+            return;
+        }
+        if (minPrice > maxPrice) {
+            showErrorLabel(minPriceError, "Min price must be less than max price.");
+            return;
+        }
+
+        hideErrorLabel(minPriceError);
     }
 
     private WearCondition matchWear(double min, double max) {

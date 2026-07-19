@@ -70,12 +70,13 @@ public class TargetRepository {
 
     public Target insert(Target t) {
         String sql = """
-            INSERT INTO targets
-                (skin_id, platform, platform_target_id, max_price_usd_cents, price_modifier_cents,
+                INSERT INTO targets
+                (skin_id, platform, platform_target_id, max_price_usd_cents, min_price_usd_cents, price_modifier_cents,
                  float_range_min, float_range_max, float_part_value, quantity, auto_adjust, active,
-                 auto_calculate, last_price_cents, last_checked_at, last_error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
+                 auto_calculate, auto_calculate_max_multiplier, auto_calculate_min_multiplier,
+                  last_price_cents, last_checked_at, last_error, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
         LocalDateTime now = LocalDateTime.now();
         try (Connection conn = Database.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -96,13 +97,14 @@ public class TargetRepository {
 
     public void update(Target t) {
         String sql = """
-            UPDATE targets SET
-                skin_id = ?, platform = ?, platform_target_id = ?, max_price_usd_cents = ?,
-                price_modifier_cents = ?, float_range_min = ?, float_range_max = ?, float_part_value = ?,
-                quantity = ?, auto_adjust = ?, active = ?, auto_calculate = ?, last_price_cents = ?, last_checked_at = ?,
-                last_error = ?, updated_at = ?
-            WHERE id = ?
-        """;
+                UPDATE targets SET
+                    skin_id = ?, platform = ?, platform_target_id = ?, max_price_usd_cents = ?, min_price_usd_cents = ?,
+                    price_modifier_cents = ?, float_range_min = ?, float_range_max = ?, float_part_value = ?,
+                    quantity = ?, auto_adjust = ?, active = ?, auto_calculate = ?, auto_calculate_max_multiplier = ?,
+                    auto_calculate_min_multiplier = ?, last_price_cents = ?, last_checked_at = ?,
+                    last_error = ?, updated_at = ?
+                WHERE id = ?
+                """;
         LocalDateTime now = LocalDateTime.now();
         try (Connection conn = Database.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -110,19 +112,22 @@ public class TargetRepository {
             ps.setString(2, t.getPlatform().name());
             ps.setString(3, t.getPlatformTargetId());
             ps.setInt(4, t.getMaxPriceUsdCents());
-            ps.setInt(5, t.getPriceModifierCents());
-            setNullableDouble(ps, 6, t.getFloatRangeMin());
-            setNullableDouble(ps, 7, t.getFloatRangeMax());
-            ps.setString(8, t.getFloatPartValue());
-            ps.setInt(9, t.getQuantity());
-            ps.setInt(10, t.isAutoAdjust() ? 1 : 0);
-            ps.setInt(11, t.isActive() ? 1 : 0);
-            ps.setInt(12, t.isAutoCalculate() ? 1 : 0);
-            setNullableInt(ps, 13, t.getLastPriceCents());
-            ps.setString(14, t.getLastCheckedAt());
-            ps.setString(15, t.getLastError());
-            ps.setString(16, now.toString());
-            ps.setLong(17, t.getId());
+            ps.setInt(5, t.getMinPriceUsdCents());
+            ps.setInt(6, t.getPriceModifierCents());
+            setNullableDouble(ps, 7, t.getFloatRangeMin());
+            setNullableDouble(ps, 8, t.getFloatRangeMax());
+            ps.setString(9, t.getFloatPartValue());
+            ps.setInt(10, t.getQuantity());
+            ps.setInt(11, t.isAutoAdjust() ? 1 : 0);
+            ps.setInt(12, t.isActive() ? 1 : 0);
+            ps.setInt(13, t.isAutoCalculate() ? 1 : 0);
+            setNullableDouble(ps, 14, t.getAutoCalculateMaxMultiplier());
+            setNullableDouble(ps, 15, t.getAutoCalculateMinMultiplier());
+            setNullableInt(ps, 16, t.getLastPriceCents());
+            ps.setString(17, t.getLastCheckedAt());
+            ps.setString(18, t.getLastError());
+            ps.setString(19, now.toString());
+            ps.setLong(20, t.getId());
             ps.executeUpdate();
             t.setUpdatedAt(now);
         } catch (SQLException e) {
@@ -145,19 +150,22 @@ public class TargetRepository {
         ps.setString(2, t.getPlatform().name());
         ps.setString(3, t.getPlatformTargetId());
         ps.setInt(4, t.getMaxPriceUsdCents());
-        ps.setInt(5, t.getPriceModifierCents());
-        setNullableDouble(ps, 6, t.getFloatRangeMin());
-        setNullableDouble(ps, 7, t.getFloatRangeMax());
-        ps.setString(8, t.getFloatPartValue());
-        ps.setInt(9, t.getQuantity());
-        ps.setInt(10, t.isAutoAdjust() ? 1 : 0);
-        ps.setInt(11, t.isActive() ? 1 : 0);
-        ps.setInt(12, t.isAutoCalculate() ? 1 : 0);
-        setNullableInt(ps, 13, t.getLastPriceCents());
-        ps.setString(14, t.getLastCheckedAt());
-        ps.setString(15, t.getLastError());
-        ps.setString(16, created.toString());
-        ps.setString(17, updated.toString());
+        ps.setInt(5, t.getMinPriceUsdCents());
+        ps.setInt(6, t.getPriceModifierCents());
+        setNullableDouble(ps, 7, t.getFloatRangeMin());
+        setNullableDouble(ps, 8, t.getFloatRangeMax());
+        ps.setString(9, t.getFloatPartValue());
+        ps.setInt(10, t.getQuantity());
+        ps.setInt(11, t.isAutoAdjust() ? 1 : 0);
+        ps.setInt(12, t.isActive() ? 1 : 0);
+        ps.setInt(13, t.isAutoCalculate() ? 1 : 0);
+        setNullableDouble(ps, 14, t.getAutoCalculateMaxMultiplier());
+        setNullableDouble(ps, 15, t.getAutoCalculateMinMultiplier());
+        setNullableInt(ps, 16, t.getLastPriceCents());
+        ps.setString(17, t.getLastCheckedAt());
+        ps.setString(18, t.getLastError());
+        ps.setString(19, created.toString());
+        ps.setString(20, updated.toString());
     }
 
     private void setNullableDouble(PreparedStatement ps, int idx, Double value) throws SQLException {
@@ -178,9 +186,12 @@ public class TargetRepository {
         t.setPlatform(Platform.fromDbValue(rs.getString("platform")));
         t.setPlatformTargetId(rs.getString("platform_target_id"));
         t.setMaxPriceUsdCents(rs.getInt("max_price_usd_cents"));
+        t.setMinPriceUsdCents(rs.getInt("min_price_usd_cents"));
         t.setPriceModifierCents(rs.getInt("price_modifier_cents"));
         t.setFloatRangeMin(getNullableDouble(rs, "float_range_min"));
         t.setFloatRangeMax(getNullableDouble(rs, "float_range_max"));
+        t.setAutoCalculateMaxMultiplier(getNullableDouble(rs, "auto_calculate_max_multiplier"));
+        t.setAutoCalculateMinMultiplier(getNullableDouble(rs, "auto_calculate_min_multiplier"));
         t.setFloatPartValue(rs.getString("float_part_value"));
         t.setQuantity(rs.getInt("quantity"));
         t.setAutoAdjust(rs.getInt("auto_adjust") != 0);

@@ -129,6 +129,7 @@ public class TargetService {
                 return;
             } else {
                 client.updateTarget(target, marketHashName, desiredPrice);
+                log.info("Updated target for {} to desiredPrice {}", marketHashName, desiredPrice);
                 target.setLastPriceCents(desiredPrice);
                 targetRepository.update(target);
                 recordSnapshot(target, desiredPrice, client);
@@ -140,6 +141,7 @@ public class TargetService {
         target.setMaxPriceUsdCents(target.getMaxPriceUsdCents() > 0 ? target.getMaxPriceUsdCents() : priceThreshold);
         String newId = client.createTarget(target, marketHashName);
         target.setPlatformTargetId(newId);
+        log.info("Updated1 target for {} to desiredPrice {}", marketHashName, desiredPrice);
         target.setLastPriceCents(desiredPrice);
         targetRepository.update(target);
         recordSnapshot(target, desiredPrice, client);

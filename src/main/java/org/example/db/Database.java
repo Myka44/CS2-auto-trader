@@ -39,6 +39,7 @@ public final class Database {
 
     /** Creates the schema if it doesn't already exist. Safe to call on every startup. */
     public static synchronized void initSchema() {
+        //dropAllTables();
         if (initialized) {
             return;
         }
@@ -46,6 +47,8 @@ public final class Database {
         log.info("Initializing database at {}", AppConfig.DB_PATH);
 
         try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
+
+
 
             st.execute("""
                 CREATE TABLE IF NOT EXISTS skin_catalog (
@@ -71,6 +74,7 @@ public final class Database {
                     platform             TEXT NOT NULL,
                     platform_target_id   TEXT,
                     max_price_usd_cents  INTEGER NOT NULL DEFAULT 0,
+                    min_price_usd_cents  INTEGER NOT NULL DEFAULT 0,
                     price_modifier_cents INTEGER NOT NULL DEFAULT 1,
                     float_range_min      REAL,
                     float_range_max      REAL,
@@ -79,6 +83,8 @@ public final class Database {
                     auto_adjust          INTEGER NOT NULL DEFAULT 1,
                     active               INTEGER NOT NULL DEFAULT 1,
                     auto_calculate       INTEGER NOT NULL DEFAULT 1,
+                    auto_calculate_max_multiplier REAL,
+                    auto_calculate_min_multiplier REAL,
                     last_price_cents     INTEGER,
                     last_checked_at      TEXT,
                     last_error           TEXT,
@@ -143,6 +149,25 @@ public final class Database {
             log.info("Database schema ready.");
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize database schema", e);
+        }
+    }
+
+    public static synchronized void dropAllTables() {
+
+        log.warn("Dropping all tables...");
+        try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
+            // Drop in reverse order of dependencies (child tables first)
+            st.execute("DROP TABLE IF EXISTS price_history");
+            st.execute("DROP TABLE IF EXISTS alerts");
+            st.execute("DROP TABLE IF EXISTS targets");
+            st.execute("DROP TABLE IF EXISTS api_config");
+            st.execute("DROP TABLE IF EXISTS app_settings");
+            st.execute("DROP TABLE IF EXISTS skin_catalog");
+
+            initialized = false;
+            log.info("All tables dropped.");
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to drop tables", e);
         }
     }
 }

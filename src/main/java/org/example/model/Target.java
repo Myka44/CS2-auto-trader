@@ -11,19 +11,46 @@ public class Target {
     private Platform platform;
     private String platformTargetId;
     private int maxPriceUsdCents;
+    private int minPriceUsdCents;
     private int priceModifierCents = 1;
     private Double floatRangeMin;
     private Double floatRangeMax;
     private String floatPartValue;
-    private int quantity = 10;
+    private int quantity = 1;
     private boolean autoAdjust = true;
     private boolean active = true;
     private boolean autoCalculate = true;
+    private Double autoCalculateMaxMultiplier = 1.0;
+    private Double autoCalculateMinMultiplier = 1.0;
     private Integer lastPriceCents;
     private String lastCheckedAt;
     private String lastError;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public int getMinPriceUsdCents() {
+        return minPriceUsdCents;
+    }
+
+    public void setMinPriceUsdCents(int minPriceUsdCents) {
+        this.minPriceUsdCents = minPriceUsdCents;
+    }
+
+    public Double getAutoCalculateMaxMultiplier() {
+        return autoCalculateMaxMultiplier;
+    }
+
+    public void setAutoCalculateMaxMultiplier(Double autoCalculateMaxMultiplier) {
+        this.autoCalculateMaxMultiplier = autoCalculateMaxMultiplier;
+    }
+
+    public Double getAutoCalculateMinMultiplier() {
+        return autoCalculateMinMultiplier;
+    }
+
+    public void setAutoCalculateMinMultiplier(Double autoCalculateMinMultiplier) {
+        this.autoCalculateMinMultiplier = autoCalculateMinMultiplier;
+    }
 
     public Target() {}
 

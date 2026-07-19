@@ -40,6 +40,7 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
     private static final String ROOT_API_URL = "https://csfloat.com";
     private static final String LISTINGS_API_ENDPOINT = ROOT_API_URL + "/api/v1/listings";
     private static final String BUY_ORDERS_API_ENDPOINT = ROOT_API_URL + "/api/v1/buy-orders";
+    private static final String SIMILAR_BUY_ORDERS_API_ENDPOINT = BUY_ORDERS_API_ENDPOINT + "/similar-orders";
     private final ApiConfigRepository apiConfigRepository;
     private final ApiConfig apiConfig;
     private final SkinRepository skinRepository;
@@ -65,7 +66,7 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
 
     private ApiConfig requireConfig() throws IOException {
         return apiConfigRepository.findByPlatform(Platform.CSFLOAT)
-                .orElseThrow(() -> new IOException("CSFloat API key is not configured. Add it in Settings."));
+                .orElse(null);
     }
 
     private Map<String, String> getHeaders() throws IOException {
@@ -148,16 +149,23 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
 
     @Override
     public List<PricePoint> getPublicTargets(String marketHashName) throws IOException {
-        // See note above on getHighestPublicTargetPriceCents -- only the
-        // account's own buy orders are visible via CSFloat's API.
-        List<PricePoint> result = new ArrayList<>();
-        for (BuyOrder order : getMyBuyOrders()) {
-            if (order.marketHashName() == null || !marketHashName.equals(order.marketHashName())) continue;
-            int price = order.maxPrice() == null ? 0 : order.maxPrice();
-            int qty = order.quantity() == null ? 1 : order.quantity();
-            result.add(new PricePoint(price, "exact", qty));
+        Map<String, String> headers = getHeaders();
+
+        Map<String, Object> body = Map.of(
+                //"hybrid_properties", hybridProperties, //cia eina floatai
+                "market_hash_name", marketHashName
+        );
+        String response = HttpUtils.post(SIMILAR_BUY_ORDERS_API_ENDPOINT, headers, body);
+        SimilarBuyOrdersResponse parsed = HttpUtils.parse(response, new TypeReference<>() {});
+
+        if (parsed == null || parsed.data() == null){
+            return List.of();
         }
-        return result;
+
+        return parsed.data().stream()
+                .filter(order -> order.marketHashName().equals(marketHashName))
+                .map(order -> new PricePoint(order.price(), "exact", order.qty))
+                .toList();
     }
 
     private boolean matchesOrder(BuyOrder order, String marketHashName, Double floatMin, Double floatMax) {
@@ -301,6 +309,9 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
 
     private record ListingsResponse(List<CSFloatListing> data) {}
 
+    // response of SIMILAR_BUY_ORDERS_API_ENDPOINT
+    private record SimilarBuyOrdersResponse(List<SimilarBuyOrder> data) {}
+
     /** Entry from GET /api/v1/listings; only the fields actually used downstream are modeled. */
     public record CSFloatListing(
             Integer price,
@@ -321,6 +332,16 @@ public class CSFloatClient implements TradingPlatform, TargetPriceRecommender {
             Integer quantity
     ) {}
 
+    public record SimilarBuyOrder(
+            @JsonProperty("market_hash_name") String marketHashName,
+            @JsonProperty("hybrid_properties") HybridProperties hybridProperties,
+            Integer qty,
+            Integer price
+    ) {}
+
+    public record HybridProperties(
+
+    ){}
     /** Response shape for POST /api/v1/buy-orders. */
     private record CreateBuyOrderResponse(String id) {}
 }

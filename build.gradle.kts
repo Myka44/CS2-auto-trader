@@ -45,7 +45,11 @@ dependencies {
     // Local database - plain JDBC against SQLite, no ORM
     implementation("org.xerial:sqlite-jdbc:3.45.3.0")
 
+    // Math library for statistics
     implementation("org.apache.commons:commons-math3:3.6.1")
+
+    // JavaFX UI controls/validation
+    implementation("org.controlsfx:controlsfx:11.2.2")
 }
 
 tasks.test {
